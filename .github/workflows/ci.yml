@@ -1,0 +1,69 @@
+name: Mobile App Test Automation (Appium)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+jobs:
+  android-appium-tests:
+    name: Run Appium tests on Android emulator
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Node.js (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Appium and the UiAutomator2 driver
+        run: |
+          npm install -g appium
+          appium driver install uiautomator2
+
+      - name: Download the demo app APK
+        run: |
+          mkdir -p app
+          curl -L -o app/MyDemoAppRN.apk \
+            https://github.com/saucelabs/my-demo-app-rn/releases/latest/download/MyDemoAppRN.apk
+
+      - name: Run tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          script: |
+            appium --log-timestamp --log appium.log &
+            APPIUM_PID=$!
+            # Give the Appium server a moment to come up before tests connect
+            sleep 10
+            pytest tests -m mobile -v --html=mobile-report.html --self-contained-html
+            kill $APPIUM_PID
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-test-report
+          path: mobile-report.html
+
+      - name: Upload Appium server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-log
+          path: appium.log
