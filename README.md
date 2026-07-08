@@ -109,6 +109,16 @@ faster and more reliable. The workflow now runs on `ubuntu-latest`, enables
 KVM via udev rules, and follows the project's documented two-step AVD
 snapshot pattern (generate once, cache, reuse) to keep boot times low.
 
+**CI note (APK download):** the demo app's "latest" download alias
+(`.../releases/latest/download/MyDemoAppRN.apk`) returns a 404 for this
+release -- the real asset on the v1.3.0 release is named
+`Android-MyDemoAppRN.1.3.0.build-244.apk`. Without `curl -f`, a 404 doesn't
+fail the build; curl just saves the tiny HTML error page in place of the
+APK, and Appium then fails to install it -- which looked like every single
+test erroring instantly. The workflow now points at the exact versioned
+asset URL and uses `curl -fL` so any future link breakage fails the build
+immediately with a clear error instead of silently downloading garbage.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

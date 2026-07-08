@@ -42,8 +42,14 @@ jobs:
       - name: Download the demo app APK
         run: |
           mkdir -p app
-          curl -L -o app/MyDemoAppRN.apk \
-            https://github.com/saucelabs/my-demo-app-rn/releases/latest/download/MyDemoAppRN.apk
+          # NOTE: the "latest"-alias download URL for this asset (MyDemoAppRN.apk)
+          # returns a 404 -- the release's real asset is named differently
+          # (Android-MyDemoAppRN.1.3.0.build-244.apk). curl -f makes this fail
+          # loudly on any future breakage instead of silently saving an HTML
+          # "Not Found" page as if it were the APK (which is what caused every
+          # test to fail instantly in a previous run).
+          curl -fL -o app/MyDemoAppRN.apk \
+            https://github.com/saucelabs/my-demo-app-rn/releases/download/v1.3.0/Android-MyDemoAppRN.1.3.0.build-244.apk
 
       - name: Enable KVM group perms
         run: |
