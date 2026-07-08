@@ -16,6 +16,7 @@ jobs:
     # runners, which is what earlier revisions of this workflow used and
     # which repeatedly hit "Timeout waiting for emulator to boot."
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
