@@ -10,7 +10,12 @@ on:
 jobs:
   android-appium-tests:
     name: Run Appium tests on Android emulator
-    runs-on: macos-latest
+    # GitHub-hosted Ubuntu runners now support hardware-accelerated Android
+    # emulation (with KVM enabled below) and are the officially recommended
+    # runner for this action -- 2-3x faster and more reliable than macOS
+    # runners, which is what earlier revisions of this workflow used and
+    # which repeatedly hit "Timeout waiting for emulator to boot."
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -39,34 +44,33 @@ jobs:
           curl -L -o app/MyDemoAppRN.apk \
             https://github.com/saucelabs/my-demo-app-rn/releases/latest/download/MyDemoAppRN.apk
 
-      - name: Enable KVM/HW acceleration cache key
-        id: avd-cache-key
-        run: echo "key=avd-30-google_apis-arm64-v8a" >> "$GITHUB_OUTPUT"
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Cache AVD snapshot
+      - name: AVD cache
         uses: actions/cache@v4
         id: avd-cache
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: ${{ steps.avd-cache-key.outputs.key }}
+          key: avd-30-google_apis-x86_64
 
-      - name: Create AVD snapshot for caching
+      - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           target: google_apis
-          # macos-latest runners are Apple Silicon (arm64); an arm64-v8a system
-          # image runs natively there instead of needing x86_64-on-arm
-          # translation, which was causing repeated "Timeout waiting for
-          # emulator to boot" failures (the emulator just never came up in time).
-          arch: arm64-v8a
+          arch: x86_64
           profile: pixel_5
           force-avd-creation: false
           emulator-boot-timeout: 900
-          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
           disable-spellchecker: true
           script: echo "Generated AVD snapshot for caching."
 
@@ -75,10 +79,11 @@ jobs:
         with:
           api-level: 30
           target: google_apis
-          arch: arm64-v8a
+          arch: x86_64
           profile: pixel_5
           force-avd-creation: false
           emulator-boot-timeout: 900
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           disable-spellchecker: true
           script: |

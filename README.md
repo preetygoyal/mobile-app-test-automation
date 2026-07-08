@@ -100,13 +100,14 @@ Actions workflow itself rather than pre-verified end-to-end before pushing.
 Android emulator boot times in CI can also be slow (several minutes) —
 this is normal for this kind of pipeline, not a sign of something broken.
 
-**CI note (arm64 vs x86_64):** the first CI run timed out waiting for the
-emulator to boot. `macos-latest` GitHub runners are Apple Silicon (arm64)
-hardware; the workflow originally requested an `x86_64` system image, which
-needs to be translated to run on arm64 hosts and was too slow to boot within
-the timeout. Switched to the native `arm64-v8a` system image, added AVD
-snapshot caching (`actions/cache`) so repeat runs don't cold-boot every time,
-and raised the boot timeout to 900s as a safety margin.
+**CI note (runner choice):** the emulator repeatedly failed to boot in time
+on `macos-latest` runners, on both `x86_64` and native `arm64-v8a` system
+images. Checking the android-emulator-runner project's own current docs
+clarified why: they now explicitly recommend **Ubuntu runners with KVM
+enabled** over macOS runners for hardware-accelerated emulation -- 2-3x
+faster and more reliable. The workflow now runs on `ubuntu-latest`, enables
+KVM via udev rules, and follows the project's documented two-step AVD
+snapshot pattern (generate once, cache, reuse) to keep boot times low.
 
 ## License
 
