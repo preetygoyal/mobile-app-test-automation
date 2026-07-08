@@ -39,13 +39,48 @@ jobs:
           curl -L -o app/MyDemoAppRN.apk \
             https://github.com/saucelabs/my-demo-app-rn/releases/latest/download/MyDemoAppRN.apk
 
+      - name: Enable KVM/HW acceleration cache key
+        id: avd-cache-key
+        run: echo "key=avd-30-google_apis-arm64-v8a" >> "$GITHUB_OUTPUT"
+
+      - name: Cache AVD snapshot
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: ${{ steps.avd-cache-key.outputs.key }}
+
+      - name: Create AVD snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          # macos-latest runners are Apple Silicon (arm64); an arm64-v8a system
+          # image runs natively there instead of needing x86_64-on-arm
+          # translation, which was causing repeated "Timeout waiting for
+          # emulator to boot" failures (the emulator just never came up in time).
+          arch: arm64-v8a
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          disable-spellchecker: true
+          script: echo "Generated AVD snapshot for caching."
+
       - name: Run tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           target: google_apis
-          arch: x86_64
+          arch: arm64-v8a
           profile: pixel_5
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          disable-spellchecker: true
           script: |
             appium --log-timestamp --log appium.log &
             APPIUM_PID=$!
