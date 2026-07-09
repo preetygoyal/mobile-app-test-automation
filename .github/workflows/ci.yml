@@ -42,14 +42,18 @@ jobs:
       - name: Download the demo app APK
         run: |
           mkdir -p app
-          # NOTE: the "latest"-alias download URL for this asset (MyDemoAppRN.apk)
-          # returns a 404 -- the release's real asset is named differently
-          # (Android-MyDemoAppRN.1.3.0.build-244.apk). curl -f makes this fail
-          # loudly on any future breakage instead of silently saving an HTML
-          # "Not Found" page as if it were the APK (which is what caused every
-          # test to fail instantly in a previous run).
-          curl -fL -o app/MyDemoAppRN.apk \
-            https://github.com/saucelabs/my-demo-app-rn/releases/download/v1.3.0/Android-MyDemoAppRN.1.3.0.build-244.apk
+          # appium/android-apidemos is Appium's own official sample app
+          # (used in Appium's own test suite), released as a stable
+          # "ApiDemos-debug.apk" asset. Pinned to a specific release tag
+          # (not the "latest" alias) so this build is reproducible and a
+          # future release can't silently change what's under test --
+          # curl -fL still fails loudly instead of saving an HTML error
+          # page if this URL ever breaks (see git history for why that
+          # matters: a previous app's "latest" alias 404'd and silently
+          # downloaded an HTML page in its place, which looked like every
+          # single test failing instantly).
+          curl -fL -o app/ApiDemos-debug.apk \
+            https://github.com/appium/android-apidemos/releases/download/v6.0.10/ApiDemos-debug.apk
 
       - name: Enable KVM group perms
         run: |

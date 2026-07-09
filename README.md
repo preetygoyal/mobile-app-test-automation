@@ -3,19 +3,30 @@
 [![Mobile App Test Automation](https://github.com/preetygoyal/mobile-app-test-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/preetygoyal/mobile-app-test-automation/actions/workflows/ci.yml)
 
 Appium + Python/pytest test suite for a real Android app, using the
-**Page Object Model**, targeting Sauce Labs' public demo app
-[`my-demo-app-rn`](https://github.com/saucelabs/my-demo-app-rn) — a
-React Native shopping app purpose-built for mobile test automation practice
-(login, product catalog, item details, cart).
+**Page Object Model**, targeting
+[`appium/android-apidemos`](https://github.com/appium/android-apidemos) —
+Appium's own official sample app (a fork of Google's Android ApiDemos),
+maintained specifically for testing Appium itself.
 
 ## Why this app
 
-Unlike a generic sample APK, `my-demo-app-rn` ships with real validation
-logic, real error copy, a locked-out-account scenario, and sortable product
-listings — enough surface area to demonstrate realistic mobile QA scenarios
-rather than trivial "tap a button" tests. All locators and test credentials
-in this project come directly from the app's own published source, not
-guessed from the UI.
+This project previously targeted Sauce Labs' `my-demo-app-rn`, a React
+Native shopping app. It's a good app to *learn* mobile QA against, but it
+turned out to be a rough fit for a CI pipeline still being built out: its
+custom in-app "reset" gesture didn't reliably return to a known screen
+between tests, its product cards required workaround text-extraction logic
+that didn't match the driver's own locator strategy, and RN's JS-bundle
+cold-start time interacted badly with a resource-constrained, un-cached CI
+emulator. Each of those turned into its own multi-run debugging cycle (see
+the CI notes below for what that actually looked like).
+
+Switching to `android-apidemos` — a plain native Android app with normal
+resource-ids, no login/cart state, and no app-specific reset logic needed —
+removes that whole class of problem, at the cost of testing simpler
+screens (an alert dialog, a text field) instead of a full shopping flow.
+That trade-off was made deliberately to get a reliably green pipeline first;
+the app can be swapped back to something more elaborate once the pipeline
+itself is solid.
 
 ## Tech stack
 
@@ -31,33 +42,29 @@ guessed from the UI.
 ```
 .
 ├── pages/
-│   ├── base_screen.py          # Shared find/wait helpers, Android text-extraction workaround
-│   ├── login_screen.py         # Username/password fields, validation errors
-│   ├── menu_screen.py          # Drawer menu: login/logout navigation
-│   ├── catalog_screen.py       # Product list, sort button
-│   ├── sort_modal.py           # Name/price ascending & descending sort options
-│   ├── item_details_screen.py  # Product detail, quantity counter, add-to-cart
-│   └── cart_screen.py          # Cart contents, remove item, proceed to checkout
+│   ├── base_screen.py          # Shared find/wait/scroll-into-view helpers
+│   ├── home_screen.py          # Root category list (App, Views, ...) and drill-down navigation
+│   ├── alert_dialog_screen.py  # App/Alert Dialogs: the OK/Cancel dialog trigger and buttons
+│   └── text_fields_screen.py   # Views/TextFields: a plain EditText
 ├── tests/
-│   ├── conftest.py             # Appium session fixture + per-test app-state reset
-│   ├── test_data.py            # Real credentials/error strings from the app's own source
-│   ├── test_login.py           # Valid/invalid/locked-out login, validation, logout
-│   ├── test_catalog.py         # Product listing, sorting, navigation to item details
-│   └── test_cart.py            # Add to cart, quantity counter, remove item, checkout gate
+│   ├── conftest.py             # Appium session fixture + per-test app relaunch
+│   ├── test_navigation.py      # Home screen contents, back-navigation
+│   ├── test_alert_dialogs.py   # Opening a dialog, dismissing via OK and via Cancel
+│   └── test_text_fields.py     # Typing into and clearing a text field
 ├── .github/workflows/ci.yml
 └── requirements.txt
 ```
 
 ## What's covered
 
-- **Login** — valid credentials, no-match credentials, a locked-out account, missing username, missing password, and logout (16 scenarios total across the suite).
-- **Catalog** — product list loads, sort by name/price, opening an item's details.
-- **Cart** — empty-cart state, adding an item, adjusting quantity, the checkout button appearing once the cart is non-empty, and removing an item back to empty.
+- **Navigation** — the home category list shows its expected top-level entries, and the device back button returns to it from a nested screen.
+- **Alert Dialogs** — opening the "OK Cancel dialog with a message" dialog, and dismissing it via both its OK and Cancel buttons.
+- **Text Fields** — typing text into a field and reading it back, and clearing a field back to empty.
 
-Every test starts from a known state via `reset_app_state` in `conftest.py`,
-which long-presses the app's header logo — the same in-app reset gesture the
-app's own official test suite uses, rather than reinstalling the APK between
-tests.
+Every test starts from a known state via `reset_app_state` in
+`conftest.py`, which terminates and relaunches the app before each test —
+see the CI notes below for why a full relaunch, not a lighter-weight
+in-app reset, is what this repo settled on.
 
 ## Running locally
 
@@ -71,8 +78,8 @@ appium driver install uiautomator2
 
 # Download the demo app once
 mkdir -p app
-curl -L -o app/MyDemoAppRN.apk \
-  https://github.com/saucelabs/my-demo-app-rn/releases/latest/download/MyDemoAppRN.apk
+curl -fL -o app/ApiDemos-debug.apk \
+  https://github.com/appium/android-apidemos/releases/download/v6.0.10/ApiDemos-debug.apk
 
 # In one terminal
 appium
@@ -85,39 +92,57 @@ pytest tests -m mobile -v
 
 `.github/workflows/ci.yml` runs on every push/PR to `main`, using
 [`reactivecircus/android-emulator-runner`](https://github.com/ReactiveCircus/android-emulator-runner)
-on a `macos-latest` runner (required for hardware-accelerated emulation) to:
+on an `ubuntu-latest` runner with KVM enabled to:
 
 1. Install Python deps, Appium, and the UiAutomator2 driver.
-2. Download the public demo APK from its GitHub release.
+2. Download the demo APK from its GitHub release.
 3. Boot a real Android emulator, start Appium, and run the full pytest suite against it.
 4. Upload the HTML test report and Appium server log as workflow artifacts.
 
 **Honest note on verification:** Appium + a full Android emulator can't run
 inside this project's development sandbox (no Android SDK/emulator support
-there), so this suite was verified for correct syntax, imports, and test
-collection locally, but the actual emulator run is exercised by the GitHub
-Actions workflow itself rather than pre-verified end-to-end before pushing.
-Android emulator boot times in CI can also be slow (several minutes) —
-this is normal for this kind of pipeline, not a sign of something broken.
+there), so this suite is verified for correct syntax, imports, and test
+collection locally (`pytest --collect-only`), but the actual emulator run
+is exercised by the GitHub Actions workflow itself rather than
+pre-verified end-to-end before pushing. Android emulator boot times in CI
+can also be slow (several minutes) — this is normal for this kind of
+pipeline, not a sign of something broken.
 
 **CI note (runner choice):** the emulator repeatedly failed to boot in time
 on `macos-latest` runners, on both `x86_64` and native `arm64-v8a` system
 images. Checking the android-emulator-runner project's own current docs
 clarified why: they now explicitly recommend **Ubuntu runners with KVM
 enabled** over macOS runners for hardware-accelerated emulation -- 2-3x
-faster and more reliable. The workflow now runs on `ubuntu-latest`, enables
+faster and more reliable. The workflow runs on `ubuntu-latest`, enables
 KVM via udev rules, and follows the project's documented two-step AVD
 snapshot pattern (generate once, cache, reuse) to keep boot times low.
 
-**CI note (APK download):** the demo app's "latest" download alias
-(`.../releases/latest/download/MyDemoAppRN.apk`) returns a 404 for this
-release -- the real asset on the v1.3.0 release is named
-`Android-MyDemoAppRN.1.3.0.build-244.apk`. Without `curl -f`, a 404 doesn't
-fail the build; curl just saves the tiny HTML error page in place of the
-APK, and Appium then fails to install it -- which looked like every single
-test erroring instantly. The workflow now points at the exact versioned
-asset URL and uses `curl -fL` so any future link breakage fails the build
-immediately with a clear error instead of silently downloading garbage.
+**CI note (emulator-runner teardown hangs):** a run was observed where
+pytest itself finished in about 3 minutes, but the `reactivecircus/
+android-emulator-runner` step then sat idle for another ~14 minutes until
+the job's overall 20-minute timeout killed the whole run and marked it
+"Cancelled" -- burying the real pytest result (which had already printed
+"13 failed") behind an unrelated infra hang. The "Run tests on Android
+emulator" step now has its own `timeout-minutes: 10`, so a stuck teardown
+fails that step directly and quickly instead of silently eating the whole
+job's time budget.
+
+**CI note (why this repo moved off `my-demo-app-rn`):** that app's
+custom "long-press the header logo to reset" gesture, copied from the
+app's own official test suite, turned out to only reliably return to the
+Catalog screen on the very first test of a session -- once a test
+navigated elsewhere (e.g. to the Cart), the long-press alone did not bring
+the app back to a populated Catalog, because (per the official suite's own
+`restartApp()` helper) the long-press is meant to run *after* a full
+`driver.reset()`, not instead of one. Combined with a separate locator bug
+(a page object was matching against a whole concatenated card string —
+name + price + rating icons -- instead of just the product name, so its
+xpath could never match a real element) and a couple of UI-state checks
+using too-short timeouts for this environment's rendering speed, getting
+that app fully green took several rounds of "real failure vs. environment
+flakiness" triage. `android-apidemos` avoids the whole category: no
+custom reset gesture, no multi-field concatenated locators, no
+login/cart state to track between tests.
 
 **CI note (Android version mismatch):** the emulator is created with
 `api-level: 30`, which boots as **Android 11**, but the Appium driver
@@ -133,21 +158,6 @@ eventually spawns. Fix: set `PLATFORM_VERSION: "11"` as a step-level `env:`
 on the "Run tests on Android emulator" step instead, which GitHub Actions
 guarantees is present in that step's process environment no matter how the
 action runs its script internally.
-
-**CI note (real test failures, not infra):** once the two fixes above
-landed, tests actually ran for the first time -- and 13 of 15 failed with
-"element not found" errors. Comparing this project's page objects line by
-line against the demo app's own official test suite
-(saucelabs/my-demo-app-rn, `__tests__/e2e/screen-objects`) showed every
-locator string matches exactly; the real gap was scrolling. The official
-suite always scrolls the screen (`findElementBySwipe`) before clicking the
-Add To Cart button, the quantity counters, and the Login/Logout items in
-the menu drawer, since those sit below the fold. This project's page
-objects clicked them directly, assuming they were already on screen.
-Added `BaseScreen.scroll_to()` (same swipe-until-visible approach as the
-official helper, using Appium's `mobile: swipeGesture` command) and wired
-it into `ItemDetailsScreen`, `CatalogScreen`, `CartScreen`, and
-`MenuScreen` wherever the official suite scrolls.
 
 ## License
 
