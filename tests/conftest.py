@@ -6,6 +6,20 @@ install between tests: long-pressing the header logo clears in-app state
 (cart contents, login session). We replicate that here via `reset_app_state`,
 which runs automatically before every test -- this mirrors exactly how the
 app's own official test suite resets between scenarios.
+
+IMPORTANT: the official suite's `restartApp()` helper
+(saucelabs/my-demo-app-rn __tests__/e2e/helpers/utils.ts) does two things,
+not one: it calls `driver.reset()` (a full terminate+relaunch of the app)
+for every test *except* the first, and only *then* does the long-press
+gesture. Earlier revisions of this fixture did the long-press alone. That
+works for the very first test (the app is still sitting on its initial
+cold-launch route), but once a test navigates away from the Catalog screen
+(e.g. to Cart), the long-press alone does not reliably bring the app back
+to a populated Catalog -- so every test after the first either raced an
+empty product list (IndexError) or, after a wait was added here, timed out
+waiting for a product list that was never coming back. Relaunching the app
+first, exactly like the official helper, is what actually returns the app
+to the Catalog screen every time.
 """
 from __future__ import annotations
 
@@ -52,33 +66,35 @@ def driver():
     appium_driver.quit()
 
 
+_first_test_done = False
+
+
 @pytest.fixture(autouse=True)
 def reset_app_state(driver):
-    """Long-presses the header logo to reset cart/login state, exactly like
-    the app's own test harness does between scenarios.
-
-    The reset gesture triggers an async reload of the catalog screen. Screen
-    objects that read the product list without an explicit wait (e.g.
-    `CatalogScreen.items()` -> `BaseScreen.find_all()`, which calls
-    `driver.find_elements()` with no polling) were racing that reload: right
-    after the long-press, the list is often still empty, so `items()[0]`
-    raised `IndexError: list index out of range` and login tests (which
-    depend on the same app-bar "open menu" button rendering) timed out with
-    NoSuchElementError. Waiting here for at least one product to reappear
-    ensures every test starts from a screen that has actually finished
-    reloading, instead of an empty one mid-reload.
+    """Restarts the app and long-presses the header logo to reset cart/login
+    state, exactly like the app's own test harness does between scenarios
+    (see the module docstring above for why both steps are needed).
     """
+    global _first_test_done
+    if _first_test_done:
+        # Full terminate + relaunch, matching the official suite's
+        # `driver.reset()` call. This is what actually returns the app to
+        # the Catalog screen; the long-press alone does not, once a
+        # previous test has navigated elsewhere.
+        driver.terminate_app(APP_PACKAGE)
+        driver.activate_app(APP_PACKAGE)
+    _first_test_done = True
+
     # 60s (not 15s): on a cold/un-cached emulator boot (no AVD snapshot to
     # restore from -- e.g. the first run after the actions/cache key
     # changes), the Android activity reports "started" well before the
     # React Native JS bundle has actually finished initializing and
     # rendering the first screen under CI's software-rendered GPU
     # (swiftshader). A run was observed where this find never succeeded
-    # within 15s for the *entire* session (all 15 tests errored in fixture
-    # setup) even though the same app rendered in under a second once
-    # warmed up in a cache-hit run. A longer ceiling costs nothing on fast
-    # runs (WebDriverWait returns as soon as the element appears) but
-    # tolerates a slow cold start instead of failing the whole suite.
+    # within 15s for the *entire* session even though the same app rendered
+    # in under a second once warmed up in a cache-hit run. A longer ceiling
+    # costs nothing on fast runs (WebDriverWait returns as soon as the
+    # element appears) but tolerates a slow cold start / relaunch.
     header = WebDriverWait(driver, 60).until(
         lambda d: d.find_element(AppiumBy.ACCESSIBILITY_ID, RESET_APP_ACCESSIBILITY_ID)
     )
