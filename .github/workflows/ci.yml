@@ -94,6 +94,13 @@ jobs:
           disable-animations: true
           disable-spellchecker: true
           script: |
+            # api-level 30 (set above) boots as Android 11 -- conftest.py's
+            # driver fixture defaults to requesting platform_version "13" if
+            # PLATFORM_VERSION isn't set, which caused Appium to fail with
+            # "Unable to find an active device or emulator with OS 13" even
+            # though the emulator was up and running fine. Pin this to match
+            # the actual booted OS version.
+            export PLATFORM_VERSION=11
             appium --log-timestamp --log appium.log &
             APPIUM_PID=$!
             # Give the Appium server a moment to come up before tests connect

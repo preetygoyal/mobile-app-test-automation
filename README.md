@@ -119,6 +119,15 @@ test erroring instantly. The workflow now points at the exact versioned
 asset URL and uses `curl -fL` so any future link breakage fails the build
 immediately with a clear error instead of silently downloading garbage.
 
+**CI note (Android version mismatch):** the emulator is created with
+`api-level: 30`, which boots as **Android 11**, but the Appium driver
+fixture (`tests/conftest.py`) defaulted to requesting `platform_version
+"13"` when no override was supplied. Appium correctly reported this as
+`Unable to find an active device or emulator with OS 13` -- the emulator
+itself was healthy, the requested OS version just didn't match what was
+actually running. The workflow now exports `PLATFORM_VERSION=11` before
+the test run so the two stay in sync.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
