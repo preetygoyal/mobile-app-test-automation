@@ -32,8 +32,12 @@ class MenuScreen(BaseScreen):
         # entry as the scrollable reference) before clicking these.
         self.scroll_to(self.LOGIN_ITEM, self.CATALOG_ITEM).click()
 
+    # timeout=8, not 3: checked right after login/logout completes, and a
+    # run was observed where the drawer item's label hadn't finished
+    # re-rendering ("log out" -> "log in" or vice versa) within 3s under
+    # CI's slower emulator, producing a false read of the *previous* state.
     def is_logged_in(self) -> bool:
-        return self.is_displayed(self.LOGOUT_ITEM, timeout=3)
+        return self.is_displayed(self.LOGOUT_ITEM, timeout=8)
 
     def logout(self):
         """Mirrors the app's own logout flow: tapping the menu item pops up a
