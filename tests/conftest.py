@@ -68,11 +68,22 @@ def reset_app_state(driver):
     ensures every test starts from a screen that has actually finished
     reloading, instead of an empty one mid-reload.
     """
-    header = WebDriverWait(driver, 15).until(
+    # 60s (not 15s): on a cold/un-cached emulator boot (no AVD snapshot to
+    # restore from -- e.g. the first run after the actions/cache key
+    # changes), the Android activity reports "started" well before the
+    # React Native JS bundle has actually finished initializing and
+    # rendering the first screen under CI's software-rendered GPU
+    # (swiftshader). A run was observed where this find never succeeded
+    # within 15s for the *entire* session (all 15 tests errored in fixture
+    # setup) even though the same app rendered in under a second once
+    # warmed up in a cache-hit run. A longer ceiling costs nothing on fast
+    # runs (WebDriverWait returns as soon as the element appears) but
+    # tolerates a slow cold start instead of failing the whole suite.
+    header = WebDriverWait(driver, 60).until(
         lambda d: d.find_element(AppiumBy.ACCESSIBILITY_ID, RESET_APP_ACCESSIBILITY_ID)
     )
     driver.execute_script("mobile: longClickGesture", {"elementId": header.id, "duration": 1000})
-    WebDriverWait(driver, 15).until(
+    WebDriverWait(driver, 30).until(
         lambda d: len(d.find_elements(AppiumBy.ACCESSIBILITY_ID, "store item")) > 0
     )
     yield
