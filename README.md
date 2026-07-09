@@ -125,8 +125,14 @@ fixture (`tests/conftest.py`) defaulted to requesting `platform_version
 "13"` when no override was supplied. Appium correctly reported this as
 `Unable to find an active device or emulator with OS 13` -- the emulator
 itself was healthy, the requested OS version just didn't match what was
-actually running. The workflow now exports `PLATFORM_VERSION=11` before
-the test run so the two stay in sync.
+actually running. First attempt: `export PLATFORM_VERSION=11` inside the
+action's `script:` block -- this did not work, because this action doesn't
+necessarily run the whole `script:` block as one continuous shell session,
+so an `export` inside it isn't guaranteed to reach the pytest process it
+eventually spawns. Fix: set `PLATFORM_VERSION: "11"` as a step-level `env:`
+on the "Run tests on Android emulator" step instead, which GitHub Actions
+guarantees is present in that step's process environment no matter how the
+action runs its script internally.
 
 ## License
 

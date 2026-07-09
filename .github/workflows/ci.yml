@@ -83,6 +83,16 @@ jobs:
 
       - name: Run tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # api-level 30 (below) boots as Android 11 -- conftest.py's driver
+          # fixture defaults to requesting platform_version "13" if
+          # PLATFORM_VERSION isn't set, which caused Appium to fail with
+          # "Unable to find an active device or emulator with OS 13" even
+          # though the emulator was up and healthy. Setting this as a
+          # step-level env var (rather than `export`-ing it inside the
+          # script) guarantees it reaches the pytest process no matter how
+          # this action internally executes the script.
+          PLATFORM_VERSION: "11"
         with:
           api-level: 30
           target: google_apis
@@ -94,17 +104,11 @@ jobs:
           disable-animations: true
           disable-spellchecker: true
           script: |
-            # api-level 30 (set above) boots as Android 11 -- conftest.py's
-            # driver fixture defaults to requesting platform_version "13" if
-            # PLATFORM_VERSION isn't set, which caused Appium to fail with
-            # "Unable to find an active device or emulator with OS 13" even
-            # though the emulator was up and running fine. Pin this to match
-            # the actual booted OS version.
-            export PLATFORM_VERSION=11
             appium --log-timestamp --log appium.log &
             APPIUM_PID=$!
             # Give the Appium server a moment to come up before tests connect
             sleep 10
+            echo "Using PLATFORM_VERSION=$PLATFORM_VERSION"
             pytest tests -m mobile -v --html=mobile-report.html --self-contained-html
             kill $APPIUM_PID
 
