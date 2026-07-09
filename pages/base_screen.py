@@ -10,7 +10,7 @@ everything has an accessibility id.
 from __future__ import annotations
 
 from appium.webdriver.common.appiumby import AppiumBy
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
 DEFAULT_TIMEOUT = 15
@@ -32,6 +32,16 @@ class BaseScreen:
         try:
             return self.find(by, value, timeout=timeout).is_displayed()
         except TimeoutException:
+            return False
+        except StaleElementReferenceException:
+            # A run showed this checked right after dismissing a dialog:
+            # find() can locate the element on one poll while it's still
+            # mid-dismiss-animation, but by the time .is_displayed() runs
+            # against that same element handle, the native view has
+            # already been torn down. A stale reference here means the
+            # element really is gone from the screen, so treat it the
+            # same as "not displayed" rather than letting the exception
+            # surface as an unrelated-looking test failure.
             return False
 
     def scroll_to_text(self, text: str, timeout: int = DEFAULT_TIMEOUT):
