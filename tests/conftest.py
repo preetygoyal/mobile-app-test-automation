@@ -55,11 +55,26 @@ def driver():
 @pytest.fixture(autouse=True)
 def reset_app_state(driver):
     """Long-presses the header logo to reset cart/login state, exactly like
-    the app's own test harness does between scenarios."""
+    the app's own test harness does between scenarios.
+
+    The reset gesture triggers an async reload of the catalog screen. Screen
+    objects that read the product list without an explicit wait (e.g.
+    `CatalogScreen.items()` -> `BaseScreen.find_all()`, which calls
+    `driver.find_elements()` with no polling) were racing that reload: right
+    after the long-press, the list is often still empty, so `items()[0]`
+    raised `IndexError: list index out of range` and login tests (which
+    depend on the same app-bar "open menu" button rendering) timed out with
+    NoSuchElementError. Waiting here for at least one product to reappear
+    ensures every test starts from a screen that has actually finished
+    reloading, instead of an empty one mid-reload.
+    """
     header = WebDriverWait(driver, 15).until(
         lambda d: d.find_element(AppiumBy.ACCESSIBILITY_ID, RESET_APP_ACCESSIBILITY_ID)
     )
     driver.execute_script("mobile: longClickGesture", {"elementId": header.id, "duration": 1000})
+    WebDriverWait(driver, 15).until(
+        lambda d: len(d.find_elements(AppiumBy.ACCESSIBILITY_ID, "store item")) > 0
+    )
     yield
 
 

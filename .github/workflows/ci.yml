@@ -82,6 +82,13 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Run tests on Android emulator
+        # Step-level timeout so that if the emulator-runner action's own
+        # teardown hangs after tests finish (observed once: pytest completed
+        # in ~3 minutes but the step then sat idle for ~14 minutes until the
+        # job-level timeout killed the whole run and marked it "Cancelled",
+        # burying the real "13 failed" test result), this step fails fast
+        # and reports its own status instead of masking it.
+        timeout-minutes: 10
         uses: reactivecircus/android-emulator-runner@v2
         env:
           # api-level 30 (below) boots as Android 11 -- conftest.py's driver
