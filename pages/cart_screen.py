@@ -1,3 +1,5 @@
+import time
+
 from .base_screen import BaseScreen
 
 
@@ -36,5 +38,23 @@ class CartScreen(BaseScreen):
             f"//android.widget.TextView[contains(@text,'{name}')]"
             "/ancestor::*[@content-desc='product row']"
         )
-        row = self.find_by_xpath(xpath)
+        # Scroll the cart screen until the matching row is visible, same
+        # reasoning as CatalogScreen.open_item_by_name.
+        row = None
+        for _ in range(6):
+            try:
+                candidate = self.driver.find_element("xpath", xpath)
+                if candidate.is_displayed():
+                    row = candidate
+                    break
+            except Exception:
+                pass
+            try:
+                self._swipe_within(self.CART_SCREEN)
+            except Exception:
+                break
+        if row is None:
+            row = self.find_by_xpath(xpath)
         row.find_element("accessibility id", "remove item").click()
+        # Let the cart's internal state finish updating.
+        time.sleep(1)

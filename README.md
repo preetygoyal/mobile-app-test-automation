@@ -134,6 +134,21 @@ on the "Run tests on Android emulator" step instead, which GitHub Actions
 guarantees is present in that step's process environment no matter how the
 action runs its script internally.
 
+**CI note (real test failures, not infra):** once the two fixes above
+landed, tests actually ran for the first time -- and 13 of 15 failed with
+"element not found" errors. Comparing this project's page objects line by
+line against the demo app's own official test suite
+(saucelabs/my-demo-app-rn, `__tests__/e2e/screen-objects`) showed every
+locator string matches exactly; the real gap was scrolling. The official
+suite always scrolls the screen (`findElementBySwipe`) before clicking the
+Add To Cart button, the quantity counters, and the Login/Logout items in
+the menu drawer, since those sit below the fold. This project's page
+objects clicked them directly, assuming they were already on screen.
+Added `BaseScreen.scroll_to()` (same swipe-until-visible approach as the
+official helper, using Appium's `mobile: swipeGesture` command) and wired
+it into `ItemDetailsScreen`, `CatalogScreen`, `CartScreen`, and
+`MenuScreen` wherever the official suite scrolls.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -1,3 +1,5 @@
+import time
+
 from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -16,12 +18,19 @@ class MenuScreen(BaseScreen):
 
     def open_menu(self):
         self.find(self.OPEN_MENU_BUTTON).click()
+        # Wait for the drawer's open animation to finish.
+        time.sleep(1)
 
     def close_menu(self):
         self.find(self.CLOSE_MENU_BUTTON).click()
+        time.sleep(0.75)
 
     def open_login(self):
-        self.find(self.LOGIN_ITEM).click()
+        # Log in / Log out sit near the bottom of the menu drawer, below
+        # several other items -- the app's own official test suite always
+        # scrolls the drawer (using the always-visible "menu item catalog"
+        # entry as the scrollable reference) before clicking these.
+        self.scroll_to(self.LOGIN_ITEM, self.CATALOG_ITEM).click()
 
     def is_logged_in(self) -> bool:
         return self.is_displayed(self.LOGOUT_ITEM, timeout=3)
@@ -29,7 +38,7 @@ class MenuScreen(BaseScreen):
     def logout(self):
         """Mirrors the app's own logout flow: tapping the menu item pops up a
         native confirmation dialog with LOG OUT / CANCEL, then an OK toast."""
-        self.find(self.LOGOUT_ITEM).click()
+        self.scroll_to(self.LOGOUT_ITEM, self.CATALOG_ITEM).click()
         log_out_button = WebDriverWait(self.driver, 10).until(
             lambda d: d.find_element(AppiumBy.XPATH, ANDROID_LOG_OUT_BUTTON)
         )
@@ -38,3 +47,4 @@ class MenuScreen(BaseScreen):
             lambda d: d.find_element(AppiumBy.XPATH, ANDROID_OK_BUTTON)
         )
         ok_button.click()
+        time.sleep(1)

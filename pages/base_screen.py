@@ -7,8 +7,10 @@ official WebdriverIO/Mocha test suite uses, ported here to Python/pytest.
 """
 from __future__ import annotations
 
+import time
+
 from appium.webdriver.common.appiumby import AppiumBy
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 
 DEFAULT_TIMEOUT = 15
@@ -36,6 +38,47 @@ class BaseScreen:
             return self.find(accessibility_id, timeout=timeout).is_displayed()
         except TimeoutException:
             return False
+
+    def _swipe_within(self, container_id: str, direction: str = "up"):
+        """Swipes inside `container_id`'s bounds, using Appium's built-in
+        UiAutomator2 gesture command."""
+        container = self.find(container_id)
+        rect = container.rect
+        self.driver.execute_script(
+            "mobile: swipeGesture",
+            {
+                "left": rect["x"],
+                "top": rect["y"],
+                "width": rect["width"],
+                "height": rect["height"],
+                "direction": direction,
+                "percent": 0.75,
+            },
+        )
+
+    def scroll_to(self, accessibility_id: str, container_id: str, max_scrolls: int = 6):
+        """Repeatedly swipes inside `container_id` until the element identified
+        by `accessibility_id` is on screen, then returns it.
+
+        This mirrors `findElementBySwipe` in the demo app's own official test
+        suite (__tests__/e2e/helpers/gestures.ts) -- several screens in this
+        app (product details, the cart, and the lower items in the menu
+        drawer) render content below the fold that has to be scrolled into
+        view before Appium can find or click it. Clicking these elements
+        without scrolling first was the actual cause of most CI test
+        failures (Appium reporting "element not found" even though the
+        element genuinely exists, just off-screen).
+        """
+        for _ in range(max_scrolls):
+            if self.is_displayed(accessibility_id, timeout=2):
+                return self.find(accessibility_id, timeout=2)
+            try:
+                self._swipe_within(container_id)
+            except (TimeoutException, NoSuchElementException):
+                break
+        # Final attempt -- let the natural TimeoutException surface if the
+        # element genuinely isn't there, rather than swallowing the error.
+        return self.find(accessibility_id)
 
     def long_press(self, element, duration_ms: int = 1000):
         """Long-press gesture, used by the demo app to reset its own state

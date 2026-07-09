@@ -1,3 +1,5 @@
+import time
+
 from .base_screen import BaseScreen
 
 
@@ -17,13 +19,20 @@ class ItemDetailsScreen(BaseScreen):
         return self.find(self.CONTAINER_HEADER).text
 
     def add_to_cart(self):
-        self.find(self.ADD_TO_CART_BUTTON).click()
+        # The Add To Cart button sits below the fold on most product pages
+        # and needs to be scrolled into view first (see BaseScreen.scroll_to).
+        self.scroll_to(self.ADD_TO_CART_BUTTON, self.PRODUCT_SCREEN).click()
+        # Let the app's internal cart state finish updating before the next
+        # screen interaction (matches the official screen object's own pause).
+        time.sleep(1)
 
     def increase_quantity(self):
-        self.find(self.COUNTER_PLUS).click()
+        self.scroll_to(self.COUNTER_PLUS, self.PRODUCT_SCREEN).click()
+        time.sleep(1)
 
     def decrease_quantity(self):
-        self.find(self.COUNTER_MINUS).click()
+        self.scroll_to(self.COUNTER_MINUS, self.PRODUCT_SCREEN).click()
+        time.sleep(1)
 
     def get_quantity(self) -> int:
         return int(self.find(self.COUNTER_AMOUNT).text)
