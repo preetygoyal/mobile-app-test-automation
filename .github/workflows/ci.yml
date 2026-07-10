@@ -92,7 +92,11 @@ jobs:
         # job-level timeout killed the whole run and marked it "Cancelled",
         # burying the real "13 failed" test result), this step fails fast
         # and reports its own status instead of masking it.
-        timeout-minutes: 10
+        # 6 minutes, not 10: with the current suite, a healthy run's pytest
+        # output appears within ~2 minutes of this step starting, so 6
+        # minutes is still a generous 3x buffer while failing faster than
+        # before when the known teardown hang below happens.
+        timeout-minutes: 6
         uses: reactivecircus/android-emulator-runner@v2
         env:
           # api-level 30 (below) boots as Android 11 -- conftest.py's driver
@@ -104,6 +108,16 @@ jobs:
           # script) guarantees it reaches the pytest process no matter how
           # this action internally executes the script.
           PLATFORM_VERSION: "11"
+          # A run showed pytest finish cleanly ("6 passed") and this
+          # step's own script exit 0, then the emulator-runner action's
+          # own "Terminate Emulator" logic hang for 8+ minutes right after
+          # logging "Wait for emulator ... 20 seconds to shutdown
+          # gracefully before kill" -- far longer than the 20s the log
+          # message itself implies. The action's log message names this
+          # env var as the way to tune that wait; set it low so the
+          # graceful-shutdown phase can't itself be the long pole, even
+          # though the deeper hang may be elsewhere in the action.
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: "5"
         with:
           api-level: 30
           target: google_apis
