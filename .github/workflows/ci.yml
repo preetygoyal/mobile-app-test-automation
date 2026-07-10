@@ -136,31 +136,29 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           disable-spellchecker: true
+          # IMPORTANT: this action runs *each line* of `script:` as its own
+          # separate `sh -c` process (confirmed directly in a run's log:
+          # "[command]/usr/bin/sh -c PYTEST_EXIT=$?" and
+          # "[command]/usr/bin/sh -c echo \"$PYTEST_EXIT\" > ..." appeared
+          # as two distinct invocations) -- not one continuous shell
+          # session. Shell variables set on one line (`X=...`) are
+          # completely gone by the next line, full stop. That's the same
+          # underlying reason PLATFORM_VERSION had to be a step-level env
+          # var earlier in this file rather than `export`-ed, and it's
+          # why $APPIUM_PID and then $PYTEST_EXIT both came back empty
+          # when read on a later line. The fix is the same both times:
+          # never split a "capture a value" step from its "use the value"
+          # step across two lines -- keep them on one line (one `;`
+          # separated command = one `sh -c` invocation), or persist the
+          # value to a file instead of a shell variable.
           script: |
             appium --log-timestamp --log appium.log &
-            APPIUM_PID=$!
             # Give the Appium server a moment to come up before tests connect
             sleep 10
             echo "Using PLATFORM_VERSION=$PLATFORM_VERSION"
-            pytest tests -m mobile -v --html=mobile-report.html --self-contained-html
-            PYTEST_EXIT=$?
-            # `|| true`: a run showed this action doesn't reliably carry
-            # shell state (like a `$!`-captured PID) across this script
-            # block the same way a normal single shell session would --
-            # $APPIUM_PID came back empty, so `kill` ran with no argument,
-            # printed its usage message, and exited 2, which failed this
-            # whole step even though every pytest test had just passed.
-            # Cleaning up the background Appium server is best-effort
-            # housekeeping, not part of the test result, so it must never
-            # be able to fail the step on its own -- exit with pytest's
-            # actual exit code instead, which is what should determine
-            # pass/fail here.
-            kill "$APPIUM_PID" 2>/dev/null || true
-            # Written before the hang-prone "Terminate Emulator" teardown
-            # even starts, so the next step can determine real pass/fail
-            # independently of whatever that teardown does afterward.
-            echo "$PYTEST_EXIT" > pytest_exit_code.txt
-            exit $PYTEST_EXIT
+            pytest tests -m mobile -v --html=mobile-report.html --self-contained-html; echo $? > pytest_exit_code.txt
+            pkill -f "node .*appium" 2>/dev/null || true
+            exit $(cat pytest_exit_code.txt)
 
       - name: Fail the job if pytest actually failed
         # This step -- not "Run tests on Android emulator" above -- is the
