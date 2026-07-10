@@ -121,7 +121,20 @@ jobs:
             sleep 10
             echo "Using PLATFORM_VERSION=$PLATFORM_VERSION"
             pytest tests -m mobile -v --html=mobile-report.html --self-contained-html
-            kill $APPIUM_PID
+            PYTEST_EXIT=$?
+            # `|| true`: a run showed this action doesn't reliably carry
+            # shell state (like a `$!`-captured PID) across this script
+            # block the same way a normal single shell session would --
+            # $APPIUM_PID came back empty, so `kill` ran with no argument,
+            # printed its usage message, and exited 2, which failed this
+            # whole step even though every pytest test had just passed.
+            # Cleaning up the background Appium server is best-effort
+            # housekeeping, not part of the test result, so it must never
+            # be able to fail the step on its own -- exit with pytest's
+            # actual exit code instead, which is what should determine
+            # pass/fail here.
+            kill "$APPIUM_PID" 2>/dev/null || true
+            exit $PYTEST_EXIT
 
       - name: Upload test report
         if: always()
