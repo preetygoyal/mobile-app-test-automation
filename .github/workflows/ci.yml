@@ -86,12 +86,20 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Run tests on Android emulator
-        # Step-level timeout so that if the emulator-runner action's own
-        # teardown hangs after tests finish (observed once: pytest completed
-        # in ~3 minutes but the step then sat idle for ~14 minutes until the
-        # job-level timeout killed the whole run and marked it "Cancelled",
-        # burying the real "13 failed" test result), this step fails fast
-        # and reports its own status instead of masking it.
+        id: run_tests
+        # continue-on-error: this action's own post-script "Terminate
+        # Emulator" teardown has repeatedly hung for minutes *after*
+        # pytest already finished and this step's script already exited
+        # cleanly (confirmed across several runs: "6 passed", script exits
+        # 0, then a hang in the action's own cleanup code, unrelated to
+        # ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL below). Letting that hang
+        # (or the timeout that bounds it) fail this step is fine -- it's
+        # genuinely informative -- but it must not fail the *job*, since
+        # the actual test result was already decided and written to
+        # pytest_exit_code.txt before the hang-prone teardown even starts.
+        # The "Fail the job if pytest actually failed" step below is the
+        # real source of truth for pass/fail.
+        continue-on-error: true
         # 6 minutes, not 10: with the current suite, a healthy run's pytest
         # output appears within ~2 minutes of this step starting, so 6
         # minutes is still a generous 3x buffer while failing faster than
@@ -148,7 +156,31 @@ jobs:
             # actual exit code instead, which is what should determine
             # pass/fail here.
             kill "$APPIUM_PID" 2>/dev/null || true
+            # Written before the hang-prone "Terminate Emulator" teardown
+            # even starts, so the next step can determine real pass/fail
+            # independently of whatever that teardown does afterward.
+            echo "$PYTEST_EXIT" > pytest_exit_code.txt
             exit $PYTEST_EXIT
+
+      - name: Fail the job if pytest actually failed
+        # This step -- not "Run tests on Android emulator" above -- is the
+        # real source of truth for the job's pass/fail. That step is
+        # allowed to report its own failure (continue-on-error: true) when
+        # the action's teardown hangs/times out *after* tests already
+        # passed, so a known-flaky third-party cleanup routine can't turn
+        # a genuinely green test run into a red one. This step reads the
+        # actual pytest exit code captured just before that teardown phase
+        # and is what actually gates the job.
+        if: always()
+        run: |
+          if [ -f pytest_exit_code.txt ]; then
+            code=$(cat pytest_exit_code.txt)
+            echo "pytest exited with code $code"
+            exit "$code"
+          else
+            echo "pytest_exit_code.txt not found -- the test step didn't get far enough to run pytest at all (see its own logs above)"
+            exit 1
+          fi
 
       - name: Upload test report
         if: always()
